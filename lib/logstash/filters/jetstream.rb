@@ -65,10 +65,10 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     rescue => e
       if e.message.include?("bucket not found")
         logger.debug("jetstream:get failed: bucket '#{bucket}' not found")
-        return false
       else
-        raise e
+        logger.error("jetstream:get failed: unexpected error", error: e.message)
       end
+      return false
     end
 
     cache_hits = 0
@@ -81,7 +81,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
         jetstream_key.each do |k|
           value = nil
           begin
-            value = cache.get(k)
+            value = c.get(k)
             if value
               logger.trace("jetstream:get hit", context(key: k, value: value[:value]))
               cache_hits += 1
@@ -93,7 +93,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
             if e.message.include?("bucket not found")
               logger.debug("jetstream:get failed: bucket '#{bucket}' not found", context(key: k))
             else
-              logger.debug("jetstream:get error", context(key: k, error: e.message))
+              logger.error("jetstream:get error", context(key: k, error: e.message))
             end
           end
         end
@@ -156,7 +156,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
           logger.debug("Bucket not found during set, creating", context(bucket: bucket))
           @jetstream.create_key_value(
           name: bucket,
-          description: "Auto-created by plugin",
+          description: "Auto-created by filter-jetstream plugin",
           subjects: ["js.#{bucket}.>"],
           ttl: 0,
           history: 1,
@@ -188,7 +188,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
 
     nc = NATS.connect(connect)
     @jetstream = nc.jetstream
-    #@jetstream.key_value(options[:bucket])
+    # @jetstream.key_value(options[:bucket])
   end
 
   def reconnect(hosts, options)
