@@ -60,33 +60,50 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
   def do_get(event)
     return false unless @get&.any?
 
-    cache_hits = 0
-    @get.each do |jetstream_key_template, event_field|
-      jetstream_key = event.sprintf(jetstream_key_template)
-      next if jetstream_key.nil?
-
-      jetstream_key = [jetstream_key].flatten
-      jetstream_key.each do |k|
-        value = nil
-        begin
-          value = cache.get(k)
-          if value
-            logger.trace("jetstream:get hit", context(key: k, value: value[:value]))
-            cache_hits += 1
-            update_event_field(event, event_field, value[:value])
-          else
-            logger.trace("jetstream:get miss", context(key: k))
-          end
-        rescue => e
-          logger.trace("jetstream:get miss", context(key: k))
-        end
+    begin
+      c ||= @jetstream.key_value(bucket)
+    rescue => e
+      if e.message.include?("bucket not found")
+        logger.debug("jetstream:get failed: bucket '#{bucket}' not found")
+        return false
+      else
+        raise e
       end
     end
 
-    return cache_hits > 0
-  rescue => e
-    logger.debug("cannot get jetstream key", message: e.message)
-    return false
+    cache_hits = 0
+    begin
+      @get.each do |jetstream_key_template, event_field|
+        jetstream_key = event.sprintf(jetstream_key_template)
+        next if jetstream_key.nil?
+
+        jetstream_key = [jetstream_key].flatten
+        jetstream_key.each do |k|
+          value = nil
+          begin
+            value = cache.get(k)
+            if value
+              logger.trace("jetstream:get hit", context(key: k, value: value[:value]))
+              cache_hits += 1
+              update_event_field(event, event_field, value[:value])
+            else
+              logger.trace("jetstream:get miss", context(key: k))
+            end
+          rescue => e
+            if e.message.include?("bucket not found")
+              logger.debug("jetstream:get failed: bucket '#{bucket}' not found", context(key: k))
+            else
+              logger.debug("jetstream:get error", context(key: k, error: e.message))
+            end
+          end
+        end
+      end
+
+      return cache_hits > 0
+    rescue => e
+      logger.debug("cannot get jetstream key", message: e.message)
+      return false
+    end
   end
 
   def update_event_field(event, event_field, value)
@@ -135,7 +152,20 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
           res.concat(old_value)
         end
       rescue => e
-        logger.trace("jetstream:get miss", context(key: jetstream_key))
+        if e.message.include?("bucket not found")
+          logger.debug("Bucket not found during set, creating", context(bucket: bucket))
+          @jetstream.create_key_value(
+          name: bucket,
+          description: "Auto-created by plugin",
+          subjects: ["js.#{bucket}.>"],
+          ttl: 0,
+          history: 1,
+          storage: :memory,
+          replicas: 1)
+          retry
+        else
+          logger.trace("jetstream:get miss", context(key: jetstream_key))
+        end
       end
       res = res.flatten.uniq
       res = res[0] if res.length == 1
@@ -157,8 +187,8 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     end
 
     nc = NATS.connect(connect)
-    js = nc.jetstream
-    js.key_value(options[:bucket])
+    @jetstream = nc.jetstream
+    #@jetstream.key_value(options[:bucket])
   end
 
   def reconnect(hosts, options)
@@ -184,7 +214,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     tls_context = OpenSSL::SSL::SSLContext.new
     tls_context.ssl_version = @tls_version
 
-    tls_context.verify_mode = "none" ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
+    tls_context.verify_mode = @tls_verification_mode == "none" ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
 
     if @tls_certificate
       tls_context.cert_store = OpenSSL::X509::Store.new
