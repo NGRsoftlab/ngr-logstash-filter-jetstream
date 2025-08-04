@@ -156,11 +156,10 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
           logger.debug("Bucket not found during set, creating", context(bucket: bucket))
           @jetstream.create_key_value(
           name: bucket,
-          description: "Auto-created by filter-jetstream plugin",
+          description: "Auto-created by ngr-logstash-filter-jetstream plugin",
           subjects: ["js.#{bucket}.>"],
           ttl: 0,
           history: 1,
-          storage: :memory,
           replicas: 1)
           retry
         else
@@ -250,3 +249,4 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     @plugin_context.merge(hash)
   end
 end
+
