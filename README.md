@@ -6,7 +6,7 @@ You can use this plugin to query for a value, and set it if not found.
 # Usage
 
     jetstream {
-      hosts => ["nats://alertix:alertix@alertixdev.ngrsoftlab.ru:4222"]
+      hosts => ["nats://logstash:logstash@server.domain.ru:4222"]
       bucket => "test_tags"
       get => {
         "test_tag" => "[cache_tag]"
@@ -19,7 +19,7 @@ You can use this plugin to query for a value, and set it if not found.
 
 
     jetstream {
-      hosts => ["nats://alertix:alertix@alertixdev.ngrsoftlab.ru:4222"]
+      hosts => ["nats://logstash:logstash@server.domain.ru:4222"]
       bucket => "test_tags"
       set => {
         "[host][address]" => "%{[host][address]}"
