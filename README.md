@@ -3,7 +3,19 @@
 This plugin enables key/value lookup enrichment against a NATS Jetstream storage.
 You can use this plugin to query for a value, and set it if not found.
 
+## Features
+
+- **Get operations**: Retrieve data from KV buckets and store in events
+- **Set operations**: Save data from events to KV buckets
+- **Batch requests**: Execute multiple get requests via metadata
+- **TLS support**: Secure connection to NATS server
+- **Auto-create buckets**: Automatic bucket creation when needed
+
 # Usage
+
+## Basic Get Operations
+
+Retrieve data from a bucket and store it in an event field:
 
     jetstream {
       hosts => ["nats://logstash:logstash@server.domain.ru:4222"]
@@ -17,6 +29,9 @@ You can use this plugin to query for a value, and set it if not found.
       tls_enabled => true
     }
 
+## Basic Set Operations
+
+Save data from an event to a bucket
 
     jetstream {
       hosts => ["nats://logstash:logstash@server.domain.ru:4222"]
@@ -30,6 +45,47 @@ You can use this plugin to query for a value, and set it if not found.
       tls_enabled => true
     }
 
+## Batch Requests via requests Parameter
+
+Dynamically execute multiple requests to different buckets
+
+    filter {
+      # Generate requests via Ruby code
+      ruby {
+        code => '
+          requests = []
+
+        # Requests to different buckets
+        requests << {
+          "bucket" => "ips_bucket",
+          "key" => event.get("[source][ip]"),
+          "target" => "[tags]",
+          "append" => true
+        }
+
+        requests << {
+          "bucket" => "userenames_bucket",
+          "key" => event.get("[user][name]"),
+          "target" => "[tags]",
+          "append" => true
+        }
+
+        event.set("[@metadata][custom_requests]", requests)
+      '
+    }
+
+    # Execute requests
+    jetstream {
+        hosts => ["nats://logstash:logstash@server.domain.ru:4222"]
+        bucket => "my_bucket"  # an existing bucket to avoid errors
+        tls_certificate => "/usr/share/logstash/config/cas.crt"
+        tls_enabled => true
+        tls_verification_mode => "none"
+        tag_on_failure => "_jetstream_failure"
+        requests => "[@metadata][jetstream_requests]"
+    }
+  }
+
 ## Plugin options
 * `hosts` (default: ["nats://localhost:4222"]) - list of addresses to connect, may contains login and passwords
 * `bucket` - name of Jetstream bucket, required
@@ -40,6 +96,7 @@ You can use this plugin to query for a value, and set it if not found.
 * `tls_version` (default: TLSv1.2, one of [TLSv1.1, TLSv1.2, TLSv1.3]) * minimal available version TLS
 * `tls_verification_mode` (default: full, one of [full, none]) - is need for host and certificate verification
 * `tag_on_failure` (default: _jetstream_failure) - tag on failure
+* `requests` (default: [@metadata][jetstream_requests]) - variable for storing requests to broker
 
 
 # Installation
