@@ -12,7 +12,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
   config :bucket, :validate => :string, :required => true
   config :get, :validate => :hash, :required => false
   config :set, :validate => :hash, :required => false
-  config :requests, :validate => :string, :required => false, :default => nil
+  config :requests, :validate => :string, :required => false
   config :tls_certificate, :validate => :path
   config :tls_enabled, :validate => :boolean, :default => false
   config :tls_version, :validate => %w[TLSv1.1 TLSv1.2 TLSv1.3], :default => 'TLSv1.2'
