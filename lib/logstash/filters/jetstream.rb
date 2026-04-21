@@ -12,6 +12,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
   config :bucket, :validate => :string, :required => true
   config :get, :validate => :hash, :required => false
   config :set, :validate => :hash, :required => false
+  config :requests, :validate => :string, :required => false
   config :tls_certificate, :validate => :path
   config :tls_enabled, :validate => :boolean, :default => false
   config :tls_version, :validate => %w[TLSv1.1 TLSv1.2 TLSv1.3], :default => 'TLSv1.2'
@@ -31,20 +32,60 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     @connected = Concurrent::AtomicBoolean.new(false)
   end
 
-  def filter(event)
-    unless connection_available?
-      event.tag(@tag_on_failure)
-      return
-    end
+def filter(event)
+  unless connection_available?
+    event.tag(@tag_on_failure)
+    return
+  end
+
+  begin
+    # Обрабатываем множественные get запросы из метаданных
+    process_requests(event)
+
+    set_success = do_set(event)
+    get_success = do_get(event)
+    filter_matched(event) if set_success || get_success
+  rescue => e
+    handle_unexpected_error(event, e)
+  end
+end
+
+
+def process_requests(event)
+  return unless @requests&.any?
+
+  requests = event.get(@requests)
+  return unless requests.is_a?(Array)
+
+  requests.each do |request|
+    bucket_name = request['bucket']
+    key = request['key']
+    target = request['target']
+    append = request['append']  # флаг для добавления данных
+    append = true if append.nil?  # по умолчанию true для тегов
 
     begin
-      set_success = do_set(event)
-      get_success = do_get(event)
-      filter_matched(event) if set_success || get_success
+      kv = @jetstream.key_value(bucket_name)
+      value = kv.get(key)
+      if value
+        parsed = parse_value(value[:value])
+
+        if append
+          # Режим добавления в массив
+          current = event.get(target) || []
+          current = [current] unless current.is_a?(Array)
+          parsed = [parsed] unless parsed.is_a?(Array)
+          event.set(target, current.concat(parsed))
+        else
+          # Режим перезаписи
+          event.set(target, parsed)
+        end
+      end
     rescue => e
-      handle_unexpected_error(event, e)
+      logger.debug("Failed to get from bucket #{bucket_name}", key: key, error: e.message)
     end
   end
+end
 
   def close
     @connection_mutex.synchronize do

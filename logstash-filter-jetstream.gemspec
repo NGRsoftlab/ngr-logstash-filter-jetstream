@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
     s.name          = 'logstash-filter-jetstream'
-    s.version       = '0.2.0'
+    s.version       = '0.3.0'
     s.licenses      = ['Apache-2.0']
     s.summary       = 'A Logstash filter plugin for interacting with NATS Jetstream KV storage'
     s.authors       = ["vaigard"]
