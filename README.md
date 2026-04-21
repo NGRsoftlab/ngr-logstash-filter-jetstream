@@ -96,7 +96,7 @@ Dynamically execute multiple requests to different buckets
 * `tls_version` (default: TLSv1.2, one of [TLSv1.1, TLSv1.2, TLSv1.3]) * minimal available version TLS
 * `tls_verification_mode` (default: full, one of [full, none]) - is need for host and certificate verification
 * `tag_on_failure` (default: _jetstream_failure) - tag on failure
-* `requests` (default: [@metadata][jetstream_requests]) - variable for storing requests to broker
+* `requests` (default: nil) - variable for storing requests to broker
 
 
 # Installation
