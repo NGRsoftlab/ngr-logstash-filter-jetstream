@@ -52,7 +52,7 @@ end
 
 
 def process_requests(event)
-  return unless @requests.nil?
+  return if str.nil?
 
   requests = event.get(@requests)
   return unless requests.is_a?(Array)
