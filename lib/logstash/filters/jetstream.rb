@@ -21,6 +21,24 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
 
   attr_reader :cache
 
+  def mask_passwords_in_urls(urls)
+    return urls unless urls.is_a?(Array)
+
+    urls.map do |url_string|
+      begin
+        uri = URI.parse(url_string.to_s)
+        if uri.password
+          uri.password = '****'
+          uri.to_s
+        else
+          url_string
+        end
+      rescue
+        url_string
+      end
+    end
+  end
+
   def register
     @connection_mutex = Mutex.new
     @jetstream_hosts = validate_connection_hosts
@@ -28,7 +46,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     @cache = new_connection(@jetstream_hosts, @jetstream_options)
     @connected = Concurrent::AtomicBoolean.new(true)
   rescue => e
-    logger.error("Failed to connect to Jetstream", hosts: @jetstream_hosts, options: @jetstream_options, message: e.message)
+    logger.error("Failed to connect to Jetstream", hosts: mask_passwords_in_urls(@jetstream_hosts), options: @jetstream_options, message: e.message)
     @connected = Concurrent::AtomicBoolean.new(false)
   end
 
@@ -220,7 +238,7 @@ end
   end
 
   def new_connection(hosts, options)
-    logger.debug('Connecting to Jetstream', context(hosts: hosts, bucket: bucket))
+    logger.debug('Connecting to Jetstream', context(hosts: mask_passwords_in_urls(hosts), bucket: bucket))
     connect = { :servers => hosts }
     if options[:tls]
       connect[:tls] = {context: options[:tls]}
@@ -235,7 +253,7 @@ end
     @cache = new_connection(hosts, options)
     @connected.make_true
   rescue => e
-    logger.error("Failed to reconnect to Jetstream", hosts: hosts, options: options, message: e.message)
+    logger.error("Failed to reconnect to Jetstream", hosts: mask_passwords_in_urls(hosts), options: options, message: e.message)
     @connected.make_false
   end
 
@@ -276,7 +294,7 @@ end
 
   def handle_communication_error(event, error)
     event.tag(@tag_on_failure)
-    logger.error("Jetstream communication error", hosts: @jetstream_hosts, options: @jetstream_options, message: error.message)
+    logger.error("Jetstream communication error", hosts: mask_passwords_in_urls(@jetstream_hosts), options: @jetstream_options, message: error.message)
     close
   end
 
