@@ -4,6 +4,7 @@ require "logstash/namespace"
 require "logstash/json"
 require "openssl"
 require 'nats/client'
+require 'uri'
 
 class LogStash::Filters::Jetstream < LogStash::Filters::Base
   config_name "jetstream"
@@ -28,7 +29,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
       begin
         uri = URI.parse(url_string.to_s)
         if uri.password
-          uri.password = '****'
+          uri.password = '******'
           uri.to_s
         else
           url_string
