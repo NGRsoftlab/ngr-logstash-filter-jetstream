@@ -127,16 +127,24 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
       new_map = Concurrent::Map.new
       count = 0
       begin
-        kv.keys.each do |key|
-          entry = kv.get(key)
-          next unless entry
-          parsed = parse_value(entry[:value])
-          new_map[key] = parsed
-          count += 1
-        end
+
+      # Используем watchall для получения текущего состояния ключей
+      # Ни keys, ни values у нас в либе нет, придется использовать watchall (он медленнее чет простое получение ключей)
+      # С другой стороны ограничиваемся одним запросом
+      watcher = kv.watchall(include_history: false)
+
+      watcher.each do |entry|
+        # entry может быть nil при инициализации
+        next if entry.nil? || entry.key.nil?
+
+        new_map[entry.key] = parse_value(entry.value)
+        count += 1
+      end
       rescue => e
         logger.warn("jetstream: error while reading bucket", bucket: bucket_name, error: e.message)
         next
+      ensure
+        watcher&.stop
       end
 
       # Атомарно подменяем карту бакета
