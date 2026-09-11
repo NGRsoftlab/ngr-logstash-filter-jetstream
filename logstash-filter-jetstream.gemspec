@@ -18,6 +18,6 @@ Gem::Specification.new do |s|
 
     # Gem dependencies
     s.add_runtime_dependency "logstash-core-plugin-api", "~> 2.0"
-    s.add_runtime_dependency "nats-pure", "~> 2.4"
+    s.add_runtime_dependency "nats-pure", "~> 2.5.0"
     s.add_development_dependency 'logstash-devutils'
   end
