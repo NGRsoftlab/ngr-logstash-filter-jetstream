@@ -26,10 +26,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
   # Интервал обновления кэша в секундах
   config :cache_refresh_interval, :validate => :number, :default => 60
 
-  attr_reader :cache
-
   def register
-
     # bucket обязателен только если используются get/set
     if (@get&.any? || @set&.any?) && (@bucket.nil? || @bucket.empty?)
       raise LogStash::ConfigurationError,
@@ -39,7 +36,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     @connection_mutex = Mutex.new
     @jetstream_hosts = validate_connection_hosts
     @jetstream_options = validate_connection_options
-    @cache = new_connection(@jetstream_hosts, @jetstream_options)
+    @nc = new_connection(@jetstream_hosts, @jetstream_options)
     @connected = Concurrent::AtomicBoolean.new(true)
 
     # Кэш: { bucket_name => Concurrent::Map { key => parsed_value } }
@@ -78,7 +75,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     @cache_refresher&.shutdown
     @connection_mutex.synchronize do
       @connected.make_false
-      cache.close
+      @nc&.close
     end
   rescue => e
     logger.debug("Error closing Jetstream connection", message: e.message)
@@ -130,12 +127,6 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
     end
   rescue => e
     logger.error("jetstream: cache refresh failed", error: e.message, backtrace: e.backtrace)
-  end
-
-  def cached_value(bucket_name, key)
-    map = @kv_cache[bucket_name]
-    return nil unless map
-    map[key]
   end
 
   # ---------- Обработка requests ----------
@@ -309,7 +300,7 @@ end
   end
 
   def reconnect(hosts, options)
-    @cache = new_connection(hosts, options)
+    @nc = new_connection(hosts, options)
     @connected.make_true
   rescue => e
     logger.error("Failed to reconnect to Jetstream",
@@ -346,7 +337,7 @@ end
   end
 
   def validate_connection_options
-    { :tls => setup_client_tls, :bucket => @bucket }
+    { :tls => setup_client_tls }
   end
 
   def validate_connection_hosts
