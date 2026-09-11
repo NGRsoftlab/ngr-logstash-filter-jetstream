@@ -29,6 +29,13 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
   attr_reader :cache
 
   def register
+
+    # bucket обязателен только если используются get/set
+    if (@get&.any? || @set&.any?) && (@bucket.nil? || @bucket.empty?)
+      raise LogStash::ConfigurationError,
+            "'bucket' is required when 'get' or 'set' options are configured"
+    end
+
     @connection_mutex = Mutex.new
     @jetstream_hosts = validate_connection_hosts
     @jetstream_options = validate_connection_options
@@ -133,42 +140,50 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
 
   # ---------- Обработка requests ----------
 
-  def process_requests(event)
-    return if @requests.nil?
+def process_requests(event)
+  return if @requests.nil?
 
-    requests = event.get(@requests)
-    return unless requests.is_a?(Array)
+  requests = event.get(@requests)
+  return unless requests.is_a?(Hash)
 
-    requests.each do |req|
-      next unless req.is_a?(Hash)
-      bucket_name = req['bucket']
-      key         = req['key']
-      target      = req['target']
-      append      = req['append']
-      append      = true if append.nil?
+  requests.each do |bucket_name, config|
+    next unless config.is_a?(Hash)
 
-      next if bucket_name.nil? || key.nil? || target.nil?
+    keys   = config['keys']
+    target = config['target']
+    append = config['append']
+    append = true if append.nil?
 
-      value = cached_value(bucket_name, key)
+    next unless keys.is_a?(Array) && keys.any?
+    next if target.nil?
+
+    map = @kv_cache[bucket_name]
+    next unless map
+
+    collected = []
+    keys.each do |key|
+      value = map[key]
       next if value.nil?
+      value = [value] unless value.is_a?(Array)
+      collected.concat(value)
+    end
+    next if collected.empty?
 
-      parsed = value
-      parsed = [parsed] unless parsed.is_a?(Array)
-
-      if append
-        current = event.get(target) || []
-        current = [current] unless current.is_a?(Array)
-        event.set(target, (current + parsed).uniq)
-      else
-        event.set(target, parsed)
-      end
+    if append
+      current = event.get(target) || []
+      current = [current] unless current.is_a?(Array)
+      event.set(target, (current + collected).uniq)
+    else
+      event.set(target, collected.uniq)
     end
   end
+end
 
   # ---------- Оригинальные get/set (оставлены для совместимости) ----------
 
   def do_get(event)
     return false unless @get&.any?
+    return false if @bucket.nil? || @bucket.empty?
 
     begin
       c ||= @jetstream.key_value(bucket)
@@ -232,6 +247,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
 
   def do_set(event)
     return false unless @set&.any?
+    return false if @bucket.nil? || @bucket.empty?
 
     values_by_jetstream_key = @set.each_with_object({}) do |(event_field, jetstream_key_template), memo|
       value = Array(event.get(event_field))
