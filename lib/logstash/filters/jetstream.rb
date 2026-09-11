@@ -297,6 +297,7 @@ end
 
     nc = NATS.connect(connect)
     @jetstream = nc.jetstream
+    nc                # <-- явный возврат соединения
   end
 
   def reconnect(hosts, options)
