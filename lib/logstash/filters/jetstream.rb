@@ -26,7 +26,7 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
   # Интервал обновления кэша в секундах
   config :cache_refresh_interval, :validate => :number, :default => 60
 
-   def mask_passwords_in_urls(urls)
+  def mask_passwords_in_urls(urls)
     return urls unless urls.is_a?(Array)
 
     urls.map do |url_string|
@@ -41,6 +41,8 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
       rescue
         url_string
       end
+    end
+  end
 
   def register
     # bucket обязателен только если используются get/set
