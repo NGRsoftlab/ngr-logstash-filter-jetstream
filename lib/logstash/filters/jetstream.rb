@@ -128,18 +128,23 @@ class LogStash::Filters::Jetstream < LogStash::Filters::Base
       count = 0
       begin
         kv.keys.each do |key|
-          entry = kv.get(key)
-          next unless entry
-          parsed = parse_value(entry[:value])
-          new_map[key] = parsed
-          count += 1
+          begin
+            entry = kv.get(key)
+            next unless entry
+            parsed = parse_value(entry[:value])
+            new_map[key] = parsed
+            count += 1
+          rescue => e
+            logger.debug("jetstream: error reading key from cache bucket", bucket: bucket_name, key: key, error: e.message)
+          end
         end
       rescue => e
-        logger.warn("jetstream: error while reading bucket", bucket: bucket_name, error: e.message)
-        next
+        unless e.message.include?("no keys found")
+          logger.warn("jetstream: error while listing keys in bucket", bucket: bucket_name, error: e.message)
+        end
       end
 
-      # Атомарно подменяем карту бакета
+      # Атомарно подменяем карту бакета (даже если пустая — ключи могли быть удалены)
       @kv_cache[bucket_name] = new_map
       logger.debug("jetstream: cache refreshed", bucket: bucket_name, keys: count)
     end
